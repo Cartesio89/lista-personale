@@ -22,8 +22,14 @@ Dopo circa un minuto l'app è su `https://<utente>.github.io/<repo>/`.
 
 ## Come funziona il salvataggio
 - Ogni modifica va subito in cache locale e, dopo ~1 secondo, viene scritta su `data.json` come commit.
+- L'app rilegge i dati quando la apri, quando ci torni e ogni 90 secondi mentre è aperta e visibile (solo lettura: non crea commit se non cambia nulla).
 - Se due dispositivi modificano insieme, i dati vengono uniti elemento per elemento (vince la modifica più recente).
 - Lo storico dei commit del repo dati è il backup. In più: Altro → Sincronizzazione → Esporta JSON.
+
+## Etichette e progetti
+- **Progetto**: uno per attività (es. Casa Roma).
+- **Etichette**: quante ne vuoi per attività. Urgente e Sogno sono fisse; le altre le crei dal dettaglio di un'attività ("+ Nuova etichetta") o da Altro → Progetti ed etichette.
+- Nella lista Attività ogni etichetta e ogni progetto è un filtro (si possono combinare).
 
 ## Limiti noti
 - "Aggiungi a Google Calendar" crea l'evento una volta; non è una sincronizzazione a due vie.

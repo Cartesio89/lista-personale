@@ -101,18 +101,23 @@ function addDaysISO(iso, n) { const [y, m, d] = iso.split('-').map(Number); cons
 let toastTimer;
 function toast(msg, actionLabel, action) {
   const t = $('#toast');
-  t.replaceChildren(msg, actionLabel ? h('button', { onclick: () => { action(); t.classList.remove('show'); } }, actionLabel) : null);
+  t.replaceChildren(...[msg, actionLabel ? h('button', { onclick: () => { action(); t.classList.remove('show'); } }, actionLabel) : null].filter(Boolean));
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), actionLabel ? 5000 : 2200);
 }
 
 /* ================================================================ dati */
-function emptyDB() { return { version: 1, meta: { linkCategories: [], calendarEmail: 'martino.cicerani@gmail.com', updatedAt: 0 }, projects: {}, items: {} }; }
+function emptyDB() { return { version: 1, meta: { linkCategories: [], calendarEmail: 'martino.cicerani@gmail.com', updatedAt: 0 }, projects: {}, labels: {}, items: {} }; }
 let DB = lsGet(LS.data, null) || emptyDB();
+if (!DB.labels) DB.labels = {};
 const items = () => Object.values(DB.items).filter((i) => !i.deleted);
 const projects = () => Object.values(DB.projects).filter((p) => !p.deleted).sort((a, b) => a.order - b.order);
 const proj = (id) => (id && DB.projects[id] && !DB.projects[id].deleted ? DB.projects[id] : null);
+const labels = () => Object.values(DB.labels || {}).filter((l) => !l.deleted).sort((a, b) => a.order - b.order);
+const lab = (id) => (id && DB.labels && DB.labels[id] && !DB.labels[id].deleted ? DB.labels[id] : null);
+const itemLabels = (it) => (it.labels || []).map(lab).filter(Boolean);
+const PALETTE = ['#2F4BD8', '#0F7B6C', '#9A3A06', '#7A3FD1', '#B0306A', '#1F6F9E', '#3D7A1F', '#8A6D00', '#A1491F', '#5B3FA0'];
 
 function persist(opts = {}) {
   lsSet(LS.data, DB);
@@ -162,6 +167,13 @@ function createProject(name) {
   persist({ render: false });
   return p;
 }
+function createLabel(name) {
+  const ls = labels();
+  const l = { id: uid('t'), name, color: PALETTE[(ls.length + 3) % PALETTE.length], order: (ls.length ? ls[ls.length - 1].order : 0) + 1000, createdAt: now(), updatedAt: now() };
+  DB.labels[l.id] = l;
+  persist({ render: false });
+  return l;
+}
 function linkCategories() {
   const cats = [...(DB.meta.linkCategories || [])];
   for (const i of items()) if (i.kind === 'link' && i.category && !cats.includes(i.category)) cats.push(i.category);
@@ -189,14 +201,15 @@ function mergeDB(local, remote) {
     version: 1,
     meta: (remote.meta && (remote.meta.updatedAt || 0) > ((local.meta && local.meta.updatedAt) || 0)) ? remote.meta : (local.meta || remote.meta),
     projects: mergeMaps(local.projects, remote.projects),
+    labels: mergeMaps(local.labels, remote.labels),
     items: mergeMaps(local.items, remote.items),
   };
 }
 function differs(merged, remote) {
   if ((merged.meta.updatedAt || 0) !== ((remote.meta && remote.meta.updatedAt) || 0)) return true;
-  for (const key of ['projects', 'items']) {
+  for (const key of ['projects', 'labels', 'items']) {
     const r = remote[key] || {};
-    for (const [id, v] of Object.entries(merged[key])) if (!r[id] || (r[id].updatedAt || 0) !== (v.updatedAt || 0)) return true;
+    for (const [id, v] of Object.entries(merged[key] || {})) if (!r[id] || (r[id].updatedAt || 0) !== (v.updatedAt || 0)) return true;
   }
   return false;
 }
@@ -382,6 +395,7 @@ function itemRow(it, opts = {}) {
   const meta = h('div', { class: 'meta' },
     it.urgent ? h('span', { class: 'badge urgent' }, 'Urgente') : null,
     it.dream ? h('span', { class: 'badge dream' }, 'Sogno') : null,
+    itemLabels(it).map((l) => h('span', { class: 'badge lbl', style: `--c:${l.color}` }, l.name)),
     p ? h('span', { class: 'proj' }, h('span', { class: 'sw', style: `background:${p.color}` }), p.name) : null,
     it.deadline ? h('span', { class: late ? 'badge late' : 'm' }, late ? null : icon('clock'), (late ? 'Scaduta ' : '') + fmtDate(it.deadline)) : null,
     prog.tot && (it.kind === 'task' || it.kind === 'place') ? h('span', { class: 'm' }, icon('list'), `${prog.done}/${prog.tot}`) : null,
@@ -413,7 +427,8 @@ function makeSortable(listEl, getIds) {
 /* ---------------- Attività */
 function taskMatchesFilters(it) {
   if (!UI.filters.length) return true;
-  return UI.filters.some((f) => (f === 'urgent' && it.urgent) || (f === 'dream' && it.dream) || (f === 'none' && !proj(it.projectId)) || f === 'p:' + it.projectId);
+  return UI.filters.some((f) => (f === 'urgent' && it.urgent) || (f === 'dream' && it.dream) || (f === 'none' && !proj(it.projectId))
+    || f === 'p:' + it.projectId || (f.startsWith('l:') && (it.labels || []).includes(f.slice(2))));
 }
 function viewTasks() {
   const all = items().filter((i) => i.kind === 'task');
@@ -426,6 +441,7 @@ function viewTasks() {
   const canDrag = UI.taskSeg === 'todo' && !q;
 
   const chipDefs = [['urgent', 'Urgenti', 'var(--urgent)'], ['dream', 'Sogni', 'var(--dream)'],
+    ...labels().map((l) => ['l:' + l.id, '#' + l.name, l.color]),
     ...projects().map((p) => ['p:' + p.id, p.name, p.color]), ['none', 'Senza progetto', 'var(--faint)']];
   const toggleFilter = (k) => setUI({ filters: UI.filters.includes(k) ? UI.filters.filter((x) => x !== k) : [...UI.filters, k] });
   const listEl = h('div', { class: 'list' }, shown.map((it) => itemRow(it, { draggable: canDrag })));
@@ -445,6 +461,7 @@ function viewTasks() {
   const pf = UI.filters.find((f) => f.startsWith('p:')); if (pf) qs.set('p', pf.slice(2));
   if (UI.filters.includes('urgent')) qs.set('urgent', '1');
   if (UI.filters.includes('dream')) qs.set('dream', '1');
+  const lf = UI.filters.filter((f) => f.startsWith('l:')).map((f) => f.slice(2)); if (lf.length) qs.set('l', lf.join(','));
   return {
     top: topBar('Attività'), body,
     fab: fab('Nuova attività', () => go('nuovo/task?' + qs.toString())),
@@ -521,7 +538,7 @@ function viewMore() {
     body: [h('div', { class: 'list' },
       card('#/link', 'link', 'Link utili', `${nLinks} link in ${linkCategories().length} categorie`),
       card('#/appunti', 'note', 'Appunti', `${all.filter((i) => i.kind === 'note').length} note (teatro, drone, Sorare…)`),
-      card('#/progetti', 'folder', 'Progetti', `${projects().length} progetti per raggruppare le attività`),
+      card('#/progetti', 'folder', 'Progetti ed etichette', `${projects().length} progetti · ${labels().length} etichette personali`),
       card('#/impostazioni', 'gear', 'Sincronizzazione e backup', Sync.enabled() ? 'Collegato a GitHub' : 'Non configurata: dati solo su questo dispositivo'),
     )],
   };
@@ -575,25 +592,36 @@ function viewNotes() {
 }
 
 function viewProjects() {
-  const ps = projects();
-  const palette = ['#2F4BD8', '#0F7B6C', '#9A3A06', '#7A3FD1', '#B0306A', '#1F6F9E', '#3D7A1F', '#8A6D00', '#A1491F', '#5B3FA0'];
-  const count = (id) => items().filter((i) => i.kind === 'task' && i.projectId === id && !i.done).length;
-  const setP = (id, patch) => { Object.assign(DB.projects[id], patch, { updatedAt: now() }); persist(); };
+  const palette = PALETTE;
+  const countP = (id) => items().filter((i) => i.kind === 'task' && i.projectId === id && !i.done).length;
+  const countL = (id) => items().filter((i) => i.kind === 'task' && (i.labels || []).includes(id) && !i.done).length;
+  const setX = (map, id, patch) => { Object.assign(DB[map][id], patch, { updatedAt: now() }); persist(); };
+  const row = (map, x, count, filterKey, what) => h('div', { class: 'proj-row' },
+    h('button', { class: 'swatch-btn', style: `background:${x.color}`, 'aria-label': 'Cambia colore di ' + x.name,
+      onclick: () => setX(map, x.id, { color: palette[(palette.indexOf(x.color) + 1) % palette.length] }) }),
+    h('input', { class: 'input', value: x.name, 'aria-label': 'Nome ' + what, onchange: (e) => { const v = e.target.value.trim().replace(/^#/, ''); if (v) setX(map, x.id, { name: v }); } }),
+    h('button', { class: 'btn ghost', onclick: () => { setUI({ filters: [filterKey], taskSeg: 'todo' }); go('attivita'); } }, count + ' da fare'),
+    h('button', { class: 'icon-btn plain', 'aria-label': `Elimina ${what} ${x.name}`, onclick: () => {
+      if (!confirm(`Eliminare ${what === 'progetto' ? 'il progetto' : "l'etichetta"} "${x.name}"? Le attività restano.`)) return;
+      for (const it of items()) {
+        if (map === 'projects' && it.projectId === x.id) { it.projectId = null; it.updatedAt = now(); }
+        if (map === 'labels' && (it.labels || []).includes(x.id)) { it.labels = it.labels.filter((l) => l !== x.id); it.updatedAt = now(); }
+      }
+      UI.filters = UI.filters.filter((f) => f !== filterKey); lsSet(LS.ui, UI);
+      setX(map, x.id, { deleted: true });
+    } }, icon('trash')));
+  const ls = labels(), ps = projects();
   return {
-    top: topBar('Progetti', { back: 'altro', small: true }),
+    top: topBar('Progetti ed etichette', { back: 'altro', small: true }),
     body: [
-      h('p', { class: 'help' }, 'Tocca il pallino per cambiare colore. Un\'attività si assegna a un progetto quando la crei o in qualsiasi momento aprendola.'),
-      h('div', { class: 'list' }, ps.map((p) => h('div', { class: 'proj-row' },
-        h('button', { class: 'swatch-btn', style: `background:${p.color}`, 'aria-label': 'Cambia colore di ' + p.name,
-          onclick: () => setP(p.id, { color: palette[(palette.indexOf(p.color) + 1) % palette.length] }) }),
-        h('input', { class: 'input', value: p.name, 'aria-label': 'Nome progetto', onchange: (e) => { if (e.target.value.trim()) setP(p.id, { name: e.target.value.trim() }); } }),
-        h('button', { class: 'btn ghost', onclick: () => { setUI({ filters: ['p:' + p.id], taskSeg: 'todo' }); go('attivita'); } }, count(p.id) + ' da fare'),
-        h('button', { class: 'icon-btn plain', 'aria-label': 'Elimina progetto ' + p.name, onclick: () => {
-          if (!confirm(`Eliminare il progetto "${p.name}"? Le attività restano, senza progetto.`)) return;
-          for (const it of items()) if (it.projectId === p.id) { it.projectId = null; it.updatedAt = now(); }
-          setP(p.id, { deleted: true });
-        } }, icon('trash'))))),
-      h('div', { style: 'margin-top:12px' }, h('button', { class: 'btn block', onclick: () => { const n = prompt('Nome del nuovo progetto'); if (n && n.trim()) { createProject(n.trim()); render(); } } }, icon('plus'), 'Nuovo progetto')),
+      h('p', { class: 'help' }, 'Progetto: uno per attività (es. Casa Roma). Etichette: quante ne vuoi per attività (es. Weekend, Da comprare). Urgente e Sogno sono etichette fisse. Tocca il pallino per cambiare colore.'),
+      h('div', { class: 'group-title' }, 'Etichette'),
+      ls.length ? h('div', { class: 'list' }, ls.map((l) => row('labels', l, countL(l.id), 'l:' + l.id, 'etichetta')))
+        : h('p', { class: 'help' }, 'Nessuna etichetta personale ancora.'),
+      h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn block', onclick: () => { const n = prompt('Nome della nuova etichetta'); if (n && n.trim()) { createLabel(n.trim().replace(/^#/, '')); render(); } } }, icon('plus'), 'Nuova etichetta')),
+      h('div', { class: 'group-title' }, 'Progetti'),
+      h('div', { class: 'list' }, ps.map((p) => row('projects', p, countP(p.id), 'p:' + p.id, 'progetto'))),
+      h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn block', onclick: () => { const n = prompt('Nome del nuovo progetto'); if (n && n.trim()) { createProject(n.trim()); render(); } } }, icon('plus'), 'Nuovo progetto')),
     ],
   };
 }
@@ -668,7 +696,7 @@ function viewNew(route) {
   const kind = route.arg || 'task';
   const q = route.q;
   const titles = { task: 'Nuova attività', place: 'Nuovo posto', trip: 'Nuovo viaggio', link: 'Nuovo link', note: 'Nuovo appunto' };
-  const st = { projectId: q.get('p') || '', urgent: q.get('urgent') === '1', dream: q.get('dream') === '1', deadline: '', scope: q.get('scope') === 'vita' ? 'vita' : 'fattibile', category: q.get('cat') || '' };
+  const st = { projectId: q.get('p') || '', urgent: q.get('urgent') === '1', dream: q.get('dream') === '1', labels: (q.get('l') || '').split(',').filter((x) => lab(x)), deadline: '', scope: q.get('scope') === 'vita' ? 'vita' : 'fattibile', category: q.get('cat') || '' };
   const titleIn = h('input', { class: 'input', placeholder: kind === 'link' ? 'Nome del link' : 'Titolo', 'aria-label': 'Titolo', enterkeyhint: 'done' });
   const urlIn = h('input', { class: 'input', type: 'url', placeholder: 'https://…', 'aria-label': 'URL', inputmode: 'url', autocapitalize: 'off' });
   const save = () => {
@@ -676,7 +704,7 @@ function viewNew(route) {
     const url = safeUrl(urlIn.value);
     if (!title && !(kind === 'link' && url)) { titleIn.focus(); return; }
     const f = { title: title || domainOf(url) };
-    if (kind === 'task') Object.assign(f, { projectId: st.projectId || null, urgent: st.urgent, dream: st.dream, deadline: st.deadline || null });
+    if (kind === 'task') Object.assign(f, { projectId: st.projectId || null, urgent: st.urgent, dream: st.dream, labels: st.labels, deadline: st.deadline || null });
     if (kind === 'place') f.scope = st.scope;
     if (kind === 'trip') f.done = true;
     if (kind === 'link') { f.url = url; f.category = st.category || 'Da smistare'; }
@@ -685,16 +713,12 @@ function viewNew(route) {
     goBack(kind === 'link' ? 'link' : kind === 'note' ? 'appunti' : kind === 'task' ? 'attivita' : 'viaggi');
   };
   titleIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
-  const tog = (key, label, cls, ic) => {
-    const b = h('button', { class: 'toggle ' + cls, 'aria-pressed': String(st[key]), onclick: () => { st[key] = !st[key]; b.setAttribute('aria-pressed', String(st[key])); } }, icon(ic), label);
-    return b;
-  };
   const body = [h('div', { class: 'detail' }, h('div', { class: 'panel' },
     h('div', { class: 'field' }, titleIn),
     kind === 'link' ? h('div', { class: 'field' }, h('label', null, 'URL'), urlIn) : null,
     kind === 'link' ? h('div', { class: 'field' }, h('label', null, 'Categoria'), categorySelect(st.category, (v) => { st.category = v; })) : null,
     kind === 'task' ? [
-      h('div', { class: 'field' }, h('span', { class: 'lbl' }, 'Etichette'), h('div', { class: 'toggles' }, tog('urgent', 'Urgente', 't-urgent', 'flag'), tog('dream', 'Sogno', 't-dream', 'moon'))),
+      h('div', { class: 'field' }, h('span', { class: 'lbl' }, 'Etichette'), labelPicker(st, () => {})),
       h('div', { class: 'field' }, h('label', null, 'Progetto'), projectSelect(st.projectId, (v) => { st.projectId = v; })),
       h('div', { class: 'field' }, h('label', { for: 'nd' }, 'Scadenza (facoltativa)'), h('input', { class: 'input', id: 'nd', type: 'date', onchange: (e) => { st.deadline = e.target.value; } })),
     ] : null,
@@ -727,6 +751,34 @@ function projectSelect(value, onChange) {
   });
   return sel;
 }
+/* Etichette: Urgente e Sogno + etichette personali (anche più di una). */
+function labelPicker(state, onChange) {
+  // state: { urgent, dream, labels: [] }
+  const wrap = h('div', { class: 'toggles' });
+  const draw = () => {
+    const btn = (pressed, cls, style, content, onclick) => h('button', { class: 'toggle ' + cls, style, 'aria-pressed': String(!!pressed), onclick }, content);
+    wrap.replaceChildren(...[
+      btn(state.urgent, 't-urgent', null, [icon('flag'), 'Urgente'], () => { state.urgent = !state.urgent; onChange({ urgent: state.urgent }); draw(); }),
+      btn(state.dream, 't-dream', null, [icon('moon'), 'Sogno'], () => { state.dream = !state.dream; onChange({ dream: state.dream }); draw(); }),
+      labels().map((l) => btn(state.labels.includes(l.id), 't-lbl', `--c:${l.color}`, [h('span', { class: 'sw', style: `background:${l.color}` }), l.name], () => {
+        state.labels = state.labels.includes(l.id) ? state.labels.filter((x) => x !== l.id) : [...state.labels, l.id];
+        onChange({ labels: [...state.labels] }); draw();
+      })),
+      h('button', { class: 'toggle t-add', onclick: () => {
+        const n = prompt('Nome della nuova etichetta (es. Casa, Lavoro, Weekend)');
+        if (!n || !n.trim()) return;
+        const name = n.trim().replace(/^#/, '');
+        const existing = labels().find((l) => l.name.toLowerCase() === name.toLowerCase());
+        const l = existing || createLabel(name);
+        if (!state.labels.includes(l.id)) state.labels = [...state.labels, l.id];
+        onChange({ labels: [...state.labels] }); draw();
+      } }, icon('plus'), 'Nuova etichetta'),
+    ].flat());
+  };
+  draw();
+  return wrap;
+}
+
 function categorySelect(value, onChange) {
   const cats = linkCategories();
   if (value && !cats.includes(value)) cats.push(value);
@@ -777,7 +829,9 @@ function viewItem(route) {
 
   const props = [];
   if (it.kind === 'task') {
-    props.push(h('div', { class: 'toggles' }, tog('done', it.done ? 'Fatta' : 'Da fare', 't-done', 'check'), tog('urgent', 'Urgente', 't-urgent', 'flag'), tog('dream', 'Sogno', 't-dream', 'moon')));
+    props.push(h('div', { class: 'toggles' }, tog('done', it.done ? 'Fatta' : 'Da fare', 't-done', 'check')));
+    props.push(h('div', { class: 'field' }, h('span', { class: 'lbl' }, 'Etichette'),
+      labelPicker({ urgent: !!it.urgent, dream: !!it.dream, labels: (it.labels || []).filter((x) => lab(x)) }, (patch) => updateItem(id, patch, { render: false }))));
     props.push(h('div', { class: 'field' }, h('label', null, 'Progetto'), projectSelect(it.projectId || '', (v) => updateItem(id, { projectId: v || null }))));
     props.push(h('div', { class: 'field' }, h('label', { for: 'dl' }, 'Scadenza'),
       h('div', { class: 'inline' },
@@ -890,5 +944,7 @@ navStack.push(parseRoute().raw);
 render(true);
 if (Sync.enabled()) Sync.run(); else Sync.setState('local');
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Sync.enabled()) Sync.run(); });
+// controllo periodico mentre l'app è aperta e visibile: vede le modifiche fatte da altri dispositivi
+setInterval(() => { if (document.visibilityState === 'visible' && Sync.enabled() && !Sync.busy && !isEditing() && !dragging) Sync.run(); }, 90 * 1000);
 window.addEventListener('online', () => { if (Sync.enabled()) Sync.run(); });
 window.addEventListener('pagehide', () => { if (lsGet(LS.dirty, false) && Sync.enabled()) Sync.run(); });

@@ -299,3 +299,8 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .panel.props { display: flex; flex-direction: column; gap: 14px; }
 .panel.props .field + .field { margin-top: 0; }
 @media (prefers-color-scheme: dark) { .segmented button[aria-pressed="true"] { background: var(--line-strong); } }
+
+.badge.lbl { background: color-mix(in srgb, var(--c) 15%, var(--surface)); color: var(--ink); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); font-weight: 500; }
+.toggle .sw { width: 9px; height: 9px; border-radius: 5px; flex: none; }
+.toggle[aria-pressed="true"].t-lbl { background: color-mix(in srgb, var(--c) 18%, var(--surface)); border-color: var(--c); }
+.toggle.t-add { border-style: dashed; color: var(--muted); }
