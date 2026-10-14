@@ -31,6 +31,10 @@ Dopo circa un minuto l'app è su `https://<utente>.github.io/<repo>/`.
 - **Etichette**: quante ne vuoi per attività. Urgente e Sogno sono fisse; le altre le crei dal dettaglio di un'attività ("+ Nuova etichetta") o da Altro → Progetti ed etichette.
 - Nella lista Attività ogni etichetta e ogni progetto è un filtro (si possono combinare).
 
+## Viaggi
+- Nelle liste di un viaggio ogni voce ha uno stato (schema dell'Excel): ☆ visto · ○ non completato · ● annullato. Si cambia toccando il simbolo.
+- Valutazione da 1 a 5 stelle per il viaggio, per i posti visitati e per le voci viste.
+
 ## Limiti noti
 - "Aggiungi a Google Calendar" crea l'evento una volta; non è una sincronizzazione a due vie.
 - Il drag & drop funziona nella lista "Da fare", senza ricerca attiva; l'ordine vale anche quando filtri.

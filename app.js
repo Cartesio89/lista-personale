@@ -399,7 +399,9 @@ function itemRow(it, opts = {}) {
     p ? h('span', { class: 'proj' }, h('span', { class: 'sw', style: `background:${p.color}` }), p.name) : null,
     it.deadline ? h('span', { class: late ? 'badge late' : 'm' }, late ? null : icon('clock'), (late ? 'Scaduta ' : '') + fmtDate(it.deadline)) : null,
     prog.tot && (it.kind === 'task' || it.kind === 'place') ? h('span', { class: 'm' }, icon('list'), `${prog.done}/${prog.tot}`) : null,
+    it.rating ? starsView(it.rating) : null,
     prog.tot && (it.kind === 'trip' || it.kind === 'note') ? h('span', { class: 'm' }, icon('list'), `${(it.lists || []).length} ${(it.lists || []).length === 1 ? 'lista' : 'liste'}`) : null,
+    it.kind === 'trip' && prog.done ? h('span', { class: 'm' }, `☆ ${prog.done} visti`) : null,
     it.notes ? h('span', { class: 'm', title: 'Ha note' }, icon('note')) : null,
     opts.extraMeta || null,
   );
@@ -844,6 +846,12 @@ function viewItem(route) {
       h('select', { class: 'input', onchange: (e) => updateItem(id, { scope: e.target.value }) },
         h('option', { value: 'fattibile', selected: it.scope !== 'vita' }, 'Da vedere (fattibile)'),
         h('option', { value: 'vita', selected: it.scope === 'vita' }, 'Da vedere nella vita'))));
+    if (it.done) props.push(h('div', { class: 'field' }, h('span', { class: 'lbl' }, 'Valutazione'),
+      starPicker(it.rating || 0, (n) => updateItem(id, { rating: n }), 'Valutazione del posto')));
+  } else if (it.kind === 'trip' && !it.template) {
+    props.push(h('div', { class: 'field' }, h('span', { class: 'lbl' }, 'Valutazione del viaggio'),
+      starPicker(it.rating || 0, (n) => updateItem(id, { rating: n }), 'Valutazione del viaggio')));
+    props.push(h('p', { class: 'help', style: 'margin:0' }, 'Nelle liste tocca il simbolo a sinistra di una voce per cambiarne lo stato: ☆ visto · ○ non completato · ● annullato. Le voci viste si possono valutare con le stelle.'));
   } else if (it.kind === 'link') {
     const url = safeUrl(it.url);
     props.push(h('div', { class: 'field' }, h('label', { for: 'lu' }, 'URL'),
@@ -886,14 +894,37 @@ function viewItem(route) {
   return { top: topBar(kindLabel[it.kind] || 'Dettaglio', { back: fallback, small: true }), body, after: () => autoGrow(titleEl) };
 }
 
+/* ---------------- viaggi: stati delle voci (schema dell'Excel) e valutazioni */
+const STATUS = {
+  done: { sym: '☆', label: 'Visto', cls: 'st-done' },
+  partial: { sym: '○', label: 'Non completato', cls: 'st-partial' },
+  cancelled: { sym: '●', label: 'Annullato', cls: 'st-cancelled' },
+};
+const STATUS_CYCLE = [null, 'done', 'partial', 'cancelled'];
+const entryStatus = (e) => e.status || (e.done ? 'done' : null);
+function starsView(n) {
+  return h('span', { class: 'stars-view', 'aria-label': `Valutazione ${n} su 5` }, '★'.repeat(n), h('span', { class: 'off' }, '★'.repeat(5 - n)));
+}
+function starPicker(value, onPick, label, small) {
+  return h('div', { class: 'stars' + (small ? ' small' : ''), role: 'group', 'aria-label': label },
+    [1, 2, 3, 4, 5].map((n) => h('button', {
+      class: 'star' + (n <= (value || 0) ? ' on' : ''), 'aria-pressed': String(n <= (value || 0)),
+      'aria-label': `${n} ${n === 1 ? 'stella' : 'stelle'}${n === value ? ' (tocca di nuovo per togliere)' : ''}`,
+      onclick: (ev) => { ev.stopPropagation(); onPick(n === value ? 0 : n); },
+    }, '★')));
+}
+
 function listPanel(it, l) {
   const id = it.id;
   const save = (newEntries, newTitle) => {
     const lists = it.lists.map((x) => x.id === l.id ? Object.assign({}, x, { entries: newEntries || x.entries, title: newTitle || x.title }) : x);
     updateItem(id, { lists });
   };
-  const undone = l.entries.filter((e) => !e.done), done = l.entries.filter((e) => e.done);
+  const isTrip = it.kind === 'trip' && !it.template;
+  const undone = isTrip ? l.entries : l.entries.filter((e) => !e.done);
+  const done = l.entries.filter((e) => (isTrip ? entryStatus(e) === 'done' : e.done));
   const showDone = editState.showDone[l.id] || !undone.length;
+  const patchEntry = (eid, patch) => save(l.entries.map((x) => x.id === eid ? Object.assign({}, x, patch) : x));
   const entryEl = (e) => {
     if (editState.entry === e.id) {
       const t = h('input', { class: 'input', value: e.text, 'aria-label': 'Testo' });
@@ -904,10 +935,23 @@ function listPanel(it, l) {
         h('button', { class: 'btn danger', onclick: () => { editState.entry = null; save(l.entries.filter((x) => x.id !== e.id)); } }, 'Elimina')));
     }
     const url = safeUrl(e.url);
+    const content = url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, e.text, h('span', { class: 'dom' }, domainOf(url))) : linkify(e.text);
+    const editBtn = h('button', { class: 'icon-btn plain', 'aria-label': 'Modifica voce: ' + e.text, onclick: () => { editState.entry = e.id; render(); } }, icon('edit'));
+    if (isTrip) {
+      const st = entryStatus(e);
+      const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(st) + 1) % STATUS_CYCLE.length];
+      const info = st ? STATUS[st] : null;
+      return h('div', { class: 'entry trip-entry ' + (info ? info.cls : 'st-none') },
+        h('button', { class: 'status-btn', 'aria-label': `Stato: ${info ? info.label : 'nessuno'}. Tocca per: ${next ? STATUS[next].label : 'nessuno stato'} — ${e.text}`,
+          onclick: () => patchEntry(e.id, { status: next, done: next === 'done' }) }, h('span', { 'aria-hidden': 'true' }, info ? info.sym : '')),
+        h('div', { class: 'body' }, content,
+          st === 'done' || e.rating ? starPicker(e.rating || 0, (n) => patchEntry(e.id, { rating: n }), 'Valutazione di ' + e.text, true) : null),
+        editBtn);
+    }
     return h('div', { class: 'entry' + (e.done ? ' is-done' : '') },
-      checkBtn(e.done, (e.done ? 'Togli spunta: ' : 'Spunta: ') + e.text, () => save(l.entries.map((x) => x.id === e.id ? Object.assign({}, x, { done: !x.done }) : x))),
-      h('div', { class: 'body' }, url ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, e.text, h('span', { class: 'dom' }, domainOf(url))) : linkify(e.text)),
-      h('button', { class: 'icon-btn plain', 'aria-label': 'Modifica voce: ' + e.text, onclick: () => { editState.entry = e.id; render(); } }, icon('edit')));
+      checkBtn(e.done, (e.done ? 'Togli spunta: ' : 'Spunta: ') + e.text, () => patchEntry(e.id, { done: !e.done })),
+      h('div', { class: 'body' }, content),
+      editBtn);
   };
   const addIn = h('input', { class: 'input', placeholder: 'Aggiungi voce o incolla un link…', 'aria-label': 'Nuova voce in ' + l.title, enterkeyhint: 'enter' });
   const add = () => {
@@ -929,11 +973,11 @@ function listPanel(it, l) {
   return h('div', { class: 'panel' },
     h('h2', null,
       h('span', { class: 'grow' }, l.title),
-      h('span', { class: 'prog' }, `${done.length}/${l.entries.length}`),
+      h('span', { class: 'prog' }, isTrip ? `${done.length}/${l.entries.length} visti` : `${done.length}/${l.entries.length}`),
       h('button', { class: 'icon-btn plain', 'aria-label': 'Rinomina lista ' + l.title, onclick: () => { const n = prompt('Nome della lista', l.title); if (n && n.trim()) save(null, n.trim()); } }, icon('edit')),
       h('button', { class: 'icon-btn plain', 'aria-label': 'Elimina lista ' + l.title, onclick: () => { if (confirm(`Eliminare la lista "${l.title}" e le sue ${l.entries.length} voci?`)) updateItem(id, { lists: it.lists.filter((x) => x.id !== l.id) }); } }, icon('trash'))),
-    h('div', { class: 'entries' }, undone.map(entryEl), showDone ? done.map(entryEl) : null),
-    done.length && undone.length ? h('button', { class: 'btn ghost showdone', onclick: () => { editState.showDone[l.id] = !showDone; render(); } }, showDone ? 'Nascondi spuntate' : `Mostra spuntate (${done.length})`) : null,
+    h('div', { class: 'entries' }, undone.map(entryEl), !isTrip && showDone ? done.map(entryEl) : null),
+    !isTrip && done.length && undone.length ? h('button', { class: 'btn ghost showdone', onclick: () => { editState.showDone[l.id] = !showDone; render(); } }, showDone ? 'Nascondi spuntate' : `Mostra spuntate (${done.length})`) : null,
     h('div', { class: 'add-entry' }, addIn, h('button', { class: 'btn', onclick: add, 'aria-label': 'Aggiungi voce' }, icon('plus'))),
   );
 }

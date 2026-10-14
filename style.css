@@ -304,3 +304,19 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .toggle .sw { width: 9px; height: 9px; border-radius: 5px; flex: none; }
 .toggle[aria-pressed="true"].t-lbl { background: color-mix(in srgb, var(--c) 18%, var(--surface)); border-color: var(--c); }
 .toggle.t-add { border-style: dashed; color: var(--muted); }
+
+/* viaggi: stati e stelle */
+.status-btn { width: 40px; height: 40px; flex: none; border: 0; background: transparent; padding: 0; display: flex; align-items: center; justify-content: center; }
+.status-btn span { width: 26px; height: 26px; border-radius: 13px; border: 2px dashed var(--line-strong); display: flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; }
+.st-done .status-btn span { border: 2px solid var(--accent); color: var(--accent-text); background: var(--accent-soft); font-size: 17px; }
+.st-partial .status-btn span { border: 2px solid var(--muted); color: var(--muted); }
+.st-cancelled .status-btn span { border: 2px solid var(--muted); color: var(--muted); font-size: 13px; }
+.trip-entry.st-cancelled .body, .trip-entry.st-cancelled .body a { color: var(--muted); text-decoration: line-through; }
+.trip-entry.st-partial .body { color: var(--muted); }
+.stars { display: flex; gap: 2px; margin-top: 2px; }
+.star { width: 40px; height: 40px; border: 0; background: transparent; padding: 0; font-size: 26px; line-height: 1; color: var(--line-strong); }
+.star.on { color: #D99A00; }
+.stars.small .star { width: 32px; height: 32px; font-size: 19px; }
+.stars-view { color: #D99A00; letter-spacing: 1px; font-size: 13px; }
+.stars-view .off { color: var(--line-strong); }
+@media (prefers-color-scheme: dark) { .star.on, .stars-view { color: #F2B630; } }
