@@ -328,7 +328,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (pendingRender
 
 function render(routeChanged) {
   const route = parseRoute();
-  if (!routeChanged && (isEditing() || dragging)) { pendingRender = true; return; }
+  if (!routeChanged && (isEditing() || dragging || route.name === 'nuovo')) { pendingRender = true; return; }
   pendingRender = false;
   if (currentRaw !== null && routeChanged) scrollMem[currentRaw] = window.scrollY;
   const sameRoute = currentRaw === route.raw;
@@ -701,11 +701,13 @@ function viewNew(route) {
   const st = { projectId: q.get('p') || '', urgent: q.get('urgent') === '1', dream: q.get('dream') === '1', labels: (q.get('l') || '').split(',').filter((x) => lab(x)), deadline: '', scope: q.get('scope') === 'vita' ? 'vita' : 'fattibile', category: q.get('cat') || '' };
   const titleIn = h('input', { class: 'input', placeholder: kind === 'link' ? 'Nome del link' : 'Titolo', 'aria-label': 'Titolo', enterkeyhint: 'done' });
   const urlIn = h('input', { class: 'input', type: 'url', placeholder: 'https://…', 'aria-label': 'URL', inputmode: 'url', autocapitalize: 'off' });
+  const notesPh = { task: 'Dettagli, avanzamento, link utili…', place: 'Perché ci vuoi andare, periodo migliore, link…', trip: 'Com\'è andata, dove avete dormito, consigli…', link: 'A cosa serve questo link…', note: 'Scrivi qui…' };
+  const notesIn = h('textarea', { class: 'input', id: 'nn', placeholder: notesPh[kind] || 'Note…', 'aria-label': 'Note', oninput: (e) => autoGrow(e.target) });
   const save = () => {
     const title = titleIn.value.trim();
     const url = safeUrl(urlIn.value);
     if (!title && !(kind === 'link' && url)) { titleIn.focus(); return; }
-    const f = { title: title || domainOf(url) };
+    const f = { title: title || domainOf(url), notes: notesIn.value.trim() };
     if (kind === 'task') Object.assign(f, { projectId: st.projectId || null, urgent: st.urgent, dream: st.dream, labels: st.labels, deadline: st.deadline || null });
     if (kind === 'place') f.scope = st.scope;
     if (kind === 'trip') f.done = true;
@@ -728,9 +730,13 @@ function viewNew(route) {
       h('select', { class: 'input', onchange: (e) => { st.scope = e.target.value; } },
         h('option', { value: 'fattibile', selected: st.scope === 'fattibile' }, 'Da vedere (fattibile)'),
         h('option', { value: 'vita', selected: st.scope === 'vita' }, 'Da vedere nella vita'))) : null,
-    h('div', { class: 'inline', style: 'margin-top:16px' }, h('button', { class: 'btn primary', onclick: save }, 'Aggiungi'), h('button', { class: 'btn', onclick: () => goBack() }, 'Annulla')),
-    h('p', { class: 'help', style: 'margin-bottom:0' }, 'Note, liste di controllo e link si aggiungono aprendo l\'elemento dopo averlo creato.'),
-  ))];
+  ),
+    h('div', { class: 'panel' },
+      h('h2', null, h('label', { for: 'nn', class: 'grow' }, 'Note'), h('span', { class: 'prog' }, 'facoltative')),
+      notesIn,
+      h('p', { class: 'help', style: 'margin:8px 0 0' }, 'Le vedi aprendo l\'elemento. Liste di controllo e valutazioni si aggiungono dopo averlo creato.')),
+    h('div', { class: 'inline' }, h('button', { class: 'btn primary', onclick: save }, 'Aggiungi'), h('button', { class: 'btn', onclick: () => goBack() }, 'Annulla')),
+  )];
   return { top: topBar(titles[kind] || 'Nuovo', { back: 'attivita', small: true, noSync: true }), body, after: () => titleIn.focus() };
 }
 
