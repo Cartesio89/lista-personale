@@ -55,6 +55,8 @@ const ICONS = {
   pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+  cards: '<rect x="3" y="5" width="11" height="15" rx="2"/><path d="M10 4.5l8.5 2.3a2 2 0 0 1 1.4 2.4l-3 11.3"/>',
+  brick: '<rect x="3" y="9" width="18" height="10" rx="2"/><rect x="6" y="5" width="4" height="4" rx="1"/><rect x="14" y="5" width="4" height="4" rx="1"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
 };
 function icon(name, strokeWidth) {
@@ -108,9 +110,9 @@ function toast(msg, actionLabel, action) {
 }
 
 /* ================================================================ dati */
-function emptyDB() { return { version: 1, meta: { linkCategories: [], calendarEmail: 'martino.cicerani@gmail.com', updatedAt: 0 }, projects: {}, labels: {}, items: {} }; }
+function emptyDB() { return { version: 1, meta: { linkCategories: [], calendarEmail: 'martino.cicerani@gmail.com', updatedAt: 0 }, projects: {}, labels: {}, items: {}, sheets: {}, srows: {}, mcards: {}, mbuys: {} }; }
 let DB = lsGet(LS.data, null) || emptyDB();
-if (!DB.labels) DB.labels = {};
+for (const k of ['labels', 'sheets', 'srows', 'mcards', 'mbuys']) if (!DB[k]) DB[k] = {};
 const items = () => Object.values(DB.items).filter((i) => !i.deleted);
 const projects = () => Object.values(DB.projects).filter((p) => !p.deleted).sort((a, b) => a.order - b.order);
 const proj = (id) => (id && DB.projects[id] && !DB.projects[id].deleted ? DB.projects[id] : null);
@@ -202,12 +204,16 @@ function mergeDB(local, remote) {
     meta: (remote.meta && (remote.meta.updatedAt || 0) > ((local.meta && local.meta.updatedAt) || 0)) ? remote.meta : (local.meta || remote.meta),
     projects: mergeMaps(local.projects, remote.projects),
     labels: mergeMaps(local.labels, remote.labels),
+    sheets: mergeMaps(local.sheets, remote.sheets),
+    srows: mergeMaps(local.srows, remote.srows),
+    mcards: mergeMaps(local.mcards, remote.mcards),
+    mbuys: mergeMaps(local.mbuys, remote.mbuys),
     items: mergeMaps(local.items, remote.items),
   };
 }
 function differs(merged, remote) {
   if ((merged.meta.updatedAt || 0) !== ((remote.meta && remote.meta.updatedAt) || 0)) return true;
-  for (const key of ['projects', 'labels', 'items']) {
+  for (const key of ['projects', 'labels', 'items', 'sheets', 'srows', 'mcards', 'mbuys']) {
     const r = remote[key] || {};
     for (const [id, v] of Object.entries(merged[key] || {})) if (!r[id] || (r[id].updatedAt || 0) !== (v.updatedAt || 0)) return true;
   }
@@ -328,7 +334,7 @@ document.addEventListener('focusout', () => setTimeout(() => { if (pendingRender
 
 function render(routeChanged) {
   const route = parseRoute();
-  if (!routeChanged && (isEditing() || dragging || route.name === 'nuovo')) { pendingRender = true; return; }
+  if (!routeChanged && (isEditing() || dragging || route.name === 'nuovo' || route.name === 'acquisto')) { pendingRender = true; return; }
   pendingRender = false;
   if (currentRaw !== null && routeChanged) scrollMem[currentRaw] = window.scrollY;
   const sameRoute = currentRaw === route.raw;
@@ -339,6 +345,7 @@ function render(routeChanged) {
     attivita: viewTasks, scadenze: viewDeadlines, viaggi: viewTrips, altro: viewMore,
     link: viewLinks, appunti: viewNotes, progetti: viewProjects, impostazioni: viewSettings,
     item: viewItem, nuovo: viewNew,
+    magic: viewMagic, lego: viewLegoHome, foglio: viewSheet, riga: viewRow, acquisto: viewPurchase,
   };
   const fn = views[route.name] || viewTasks;
   const out = fn(route);
@@ -354,7 +361,7 @@ function render(routeChanged) {
 
 function renderTabs(route) {
   const tab = ROOTS.includes(route.name) ? route.name
-    : (['link', 'appunti', 'progetti', 'impostazioni'].includes(route.name) ? 'altro' : null);
+    : (['link', 'appunti', 'progetti', 'impostazioni', 'magic', 'lego', 'foglio', 'riga', 'acquisto'].includes(route.name) ? 'altro' : null);
   const defs = [['attivita', 'Attività', 'tasks'], ['scadenze', 'Scadenze', 'cal'], ['viaggi', 'Viaggi', 'plane'], ['altro', 'Altro', 'grid']];
   $('#tabbar').replaceChildren(h('div', { class: 'inner' }, defs.map(([k, label, ic]) =>
     h('button', { 'aria-current': tab === k ? 'page' : null, onclick: () => { if (tab !== k || route.name !== k) go(k); else window.scrollTo({ top: 0, behavior: 'smooth' }); } }, icon(ic), label))));
@@ -540,6 +547,8 @@ function viewMore() {
     body: [h('div', { class: 'list' },
       card('#/link', 'link', 'Link utili', `${nLinks} link in ${linkCategories().length} categorie`),
       card('#/appunti', 'note', 'Appunti', `${all.filter((i) => i.kind === 'note').length} note (teatro, drone, Sorare…)`),
+      card('#/magic', 'cards', 'Magic – Jarad Golgari', magicSubtitle()),
+      card('#/lego', 'brick', 'Lego', legoSubtitle()),
       card('#/progetti', 'folder', 'Progetti ed etichette', `${projects().length} progetti · ${labels().length} etichette personali`),
       card('#/impostazioni', 'gear', 'Sincronizzazione e backup', Sync.enabled() ? 'Collegato a GitHub' : 'Non configurata: dati solo su questo dispositivo'),
     )],

@@ -35,6 +35,12 @@ Dopo circa un minuto l'app è su `https://<utente>.github.io/<repo>/`.
 - Nelle liste di un viaggio ogni voce ha uno stato (schema dell'Excel): ☆ visto · ○ non completato · ● annullato. Si cambia toccando il simbolo.
 - Valutazione da 1 a 5 stelle per il viaggio, per i posti visitati e per le voci viste.
 
+## Magic e Lego (Altro)
+- **Magic**: un tab per ogni foglio dell'Excel del mazzo Jarad. Ogni cella si modifica aprendo la riga; ogni riga può avere link e note; in ogni sezione si aggiungono voci e commenti.
+- Simbolo delle carte (tocco): vuoto = da prendere · ✓ posseduta · ✓* posseduta ma non più necessaria · ○ non più necessaria. Il possesso è condiviso fra tutti i tab, "non più necessaria" vale per singolo tab.
+- **Recap acquisti**: ogni acquisto è una carta singola o un lotto con prezzo totale; le carte inserite risultano possedute ovunque. Totale spesa calcolato.
+- **Lego**: set con flag acquistato, stato spedizione, hashtag (temi da Brickset), link e note; filtri per hashtag e totale speso.
+
 ## Limiti noti
 - "Aggiungi a Google Calendar" crea l'evento una volta; non è una sincronizzazione a due vie.
 - Il drag & drop funziona nella lista "Da fare", senza ricerca attiva; l'ordine vale anche quando filtri.
