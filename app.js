@@ -451,7 +451,8 @@ function viewTasks() {
 
   const chipDefs = [['urgent', 'Urgenti', 'var(--urgent)'], ['dream', 'Sogni', 'var(--dream)'],
     ...labels().map((l) => ['l:' + l.id, '#' + l.name, l.color]),
-    ...projects().map((p) => ['p:' + p.id, p.name, p.color]), ['none', 'Senza progetto', 'var(--faint)']];
+    ...projects().map((p) => ['p:' + p.id, p.name, p.color]), ['none', 'Senza progetto', 'var(--faint)'],
+    ...(DocsLink.enabled() ? [['pay', 'Pagamenti', 'var(--urgent)']] : [])];
   const toggleFilter = (k) => setUI({ filters: UI.filters.includes(k) ? UI.filters.filter((x) => x !== k) : [...UI.filters, k] });
   const listEl = h('div', { class: 'list' }, shown.map((it) => itemRow(it, { draggable: canDrag })));
 
@@ -463,9 +464,13 @@ function viewTasks() {
       h('button', { class: 'chip', 'aria-pressed': String(!UI.filters.length), onclick: () => setUI({ filters: [] }) }, 'Tutto'),
       chipDefs.map(([k, label, color]) => h('button', { class: 'chip', 'aria-pressed': String(UI.filters.includes(k)), onclick: () => toggleFilter(k) },
         h('span', { class: 'sw', style: `background:${color}` }), label))),
-    segmented([['todo', 'Da fare', todo.length], ['done', 'Fatte', done.length]], UI.taskSeg, (k) => setUI({ taskSeg: k })),
-    shown.length ? listEl : h('div', { class: 'empty' }, UI.taskSeg === 'done' ? 'Nessuna attività completata con questi filtri.' : 'Niente da fare con questi filtri.'),
+    segmented([['todo', 'Da fare', todo.length + payCount('todo')], ['done', 'Fatte', done.length + payCount('done')]], UI.taskSeg, (k) => setUI({ taskSeg: k })),
   ];
+  const pay = payBlock(UI.taskSeg === 'done' ? 'done' : 'todo', q, UI.filters);
+  const onlyPay = UI.filters.length === 1 && UI.filters[0] === 'pay';
+  if (pay) body.push(...pay);
+  if (!onlyPay) body.push(shown.length ? listEl : h('div', { class: 'empty' }, UI.taskSeg === 'done' ? 'Nessuna attività completata con questi filtri.' : 'Niente da fare con questi filtri.'));
+  else if (!pay) body.push(h('div', { class: 'empty' }, 'Nessun pagamento in questa vista.'));
   const qs = new URLSearchParams();
   const pf = UI.filters.find((f) => f.startsWith('p:')); if (pf) qs.set('p', pf.slice(2));
   if (UI.filters.includes('urgent')) qs.set('urgent', '1');
@@ -481,16 +486,19 @@ function viewTasks() {
 /* ---------------- Scadenze (calendario interno) */
 function viewDeadlines() {
   const t = todayISO(), week = addDaysISO(t, 7);
-  const its = items().filter((i) => i.kind === 'task' && i.deadline && !i.done).sort((a, b) => a.deadline.localeCompare(b.deadline) || a.order - b.order);
+  const its = [
+    ...items().filter((i) => i.kind === 'task' && i.deadline && !i.done).map((i) => ({ date: i.deadline, ord: i.order, el: () => itemRow(i) })),
+    ...payOpen().filter((d) => d.dueDate).map((d) => ({ date: d.dueDate, ord: 0, el: () => payRow(d) })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.ord - b.ord);
   const groups = [
-    ['Scadute', its.filter((i) => i.deadline < t)],
-    ['Oggi', its.filter((i) => i.deadline === t)],
-    ['Prossimi 7 giorni', its.filter((i) => i.deadline > t && i.deadline <= week)],
-    ['Più avanti', its.filter((i) => i.deadline > week)],
+    ['Scadute', its.filter((i) => i.date < t)],
+    ['Oggi', its.filter((i) => i.date === t)],
+    ['Prossimi 7 giorni', its.filter((i) => i.date > t && i.date <= week)],
+    ['Più avanti', its.filter((i) => i.date > week)],
   ];
   const body = its.length ? groups.filter((g) => g[1].length).map(([title, list]) => [
     h('div', { class: 'group-title' }, title),
-    h('div', { class: 'list' }, list.map((i) => itemRow(i))),
+    h('div', { class: 'list' }, list.map((i) => i.el())),
   ]) : [h('div', { class: 'empty' }, 'Nessuna scadenza. Aprendo un\'attività puoi impostare una data entro cui farla e aggiungerla a Google Calendar.')];
   return { top: topBar('Scadenze'), body };
 }
@@ -684,6 +692,7 @@ function viewSettings() {
             h('li', null, 'Permissions → Repository → ', h('b', null, 'Contents: Read and write'), '. Nient\'altro.'),
             h('li', null, 'Copia il token e salvalo nel tuo password manager: serve su ogni dispositivo e dopo aver cancellato i dati del browser.')),
           h('p', null, 'Il token resta solo su questo dispositivo. Ogni modifica diventa un commit nel repo privato: hai anche lo storico.'))),
+      payPanel(),
       h('div', { class: 'panel' },
         h('h2', null, 'Google Calendar'),
         h('div', { class: 'field' }, h('label', { for: 'f-cal' }, 'Account su cui aggiungere le scadenze'),
@@ -1002,6 +1011,7 @@ if (!location.hash) history.replaceState(null, '', '#/attivita');
 navStack.push(parseRoute().raw);
 render(true);
 if (Sync.enabled()) Sync.run(); else Sync.setState('local');
+DocsLink.start();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Sync.enabled()) Sync.run(); });
 // controllo periodico mentre l'app è aperta e visibile: vede le modifiche fatte da altri dispositivi
 setInterval(() => { if (document.visibilityState === 'visible' && Sync.enabled() && !Sync.busy && !isEditing() && !dragging) Sync.run(); }, 90 * 1000);

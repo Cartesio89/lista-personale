@@ -365,3 +365,5 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .t-st .sym { min-width: 18px; text-align: center; font-weight: 700; }
 .toggle[aria-pressed="true"].t-st { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); }
 .input.auto { min-height: 44px; resize: none; overflow: hidden; line-height: 1.4; }
+
+.pay-row .row-main { text-decoration: none; color: inherit; }

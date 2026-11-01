@@ -41,6 +41,12 @@ Dopo circa un minuto l'app è su `https://<utente>.github.io/<repo>/`.
 - **Recap acquisti**: ogni acquisto è una carta singola o un lotto con prezzo totale; le carte inserite risultano possedute ovunque. Totale spesa calcolato.
 - **Lego**: set con flag acquistato, stato spedizione, hashtag (temi da Brickset), link e note; filtri per hashtag e totale speso.
 
+## Pagamenti da Documenti casa
+- I documenti "Da pagare" o "Addebito" dell'app Documenti casa (bollette, condominio, multe…) compaiono in Attività e in Scadenze; i pagati negli ultimi 90 giorni in Fatte.
+- La spunta qui scrive lo stato "pagato" direttamente nel `data.json` di `documenti-casa-data` (solo quel documento); l'app Documenti casa lo vede alla sua prossima sincronizzazione. Vale anche al contrario.
+- Nessuna copia dei documenti: la fonte è una sola. Senza rete la spunta resta in coda e viene scritta al ritorno della connessione.
+- Serve che il token della lista abbia accesso anche al repo `documenti-casa-data` (Contents: read and write). Si attiva da Altro → Sincronizzazione → Documenti casa.
+
 ## Limiti noti
 - "Aggiungi a Google Calendar" crea l'evento una volta; non è una sincronizzazione a due vie.
 - Il drag & drop funziona nella lista "Da fare", senza ricerca attiva; l'ordine vale anche quando filtri.
