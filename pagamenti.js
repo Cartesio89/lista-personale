@@ -6,17 +6,23 @@
 'use strict';
 
 const DOCS_LS = { cfg: 'lp.docscfg', cache: 'lp.docs', pending: 'lp.docsPending' };
-const DOC_CATS = { utenze: 'Utenze', condominio: 'Condominio', assicurazioni: 'Assicurazioni', mutuo: 'Mutuo', lavori: 'Lavori', elettro: 'Elettrodomestici e mobili', contratti: 'Contratti', altro: 'Altro', multe: 'Multe' };
+const DOC_CATS = { utenze: 'Utenze', condominio: 'Condominio', assicurazioni: 'Assicurazioni', bollo: 'Bollo', mutuo: 'Mutuo', lavori: 'Lavori', elettro: 'Elettrodomestici e mobili', contratti: 'Contratti', altro: 'Altro', multe: 'Multe' };
+/* Le due app stanno sullo stesso sito (cartesio89.github.io): la lista può leggere il collegamento
+   GitHub già configurato in Documenti casa, così non serve configurare niente due volte. */
+const docsAppCfg = () => { const c = lsGet('dc.cfg', null); return c && c.token ? c : null; };
 const DOC_OPEN = (d) => d.status === 'da_pagare' || d.status === 'addebitata';
 
 const DocsLink = {
   state: 'off', error: '', last: 0, busy: false, again: false, timer: null,
   cfg() {
     const c = lsGet(DOCS_LS.cfg, null);
-    return c ? Object.assign({ owner: 'Cartesio89', repo: 'documenti-casa-data', branch: 'main', token: '', appUrl: 'https://cartesio89.github.io/documenti-casa/', on: false }, c) : null;
+    const dc = docsAppCfg();
+    const base = { owner: (dc && dc.owner) || 'Cartesio89', repo: (dc && dc.repo) || 'documenti-casa-data', branch: (dc && dc.branch) || 'main', token: '', appUrl: 'https://cartesio89.github.io/documenti-casa/', on: !!dc };
+    return c ? Object.assign(base, c) : (dc ? base : null);
   },
   enabled() { const c = this.cfg(); return !!(c && c.on && this.token()); },
-  token() { const c = this.cfg() || {}; return (c.token || '').trim() || ((Sync.cfg() || {}).token || ''); },
+  /* ordine: token messo qui a mano → token di Documenti casa su questo telefono → token della lista */
+  token() { const c = this.cfg() || {}; const dc = docsAppCfg(); return (c.token || '').trim() || (dc ? dc.token : '') || ((Sync.cfg() || {}).token || ''); },
   async api(path, opts = {}) {
     const c = this.cfg();
     return fetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/${path}`, Object.assign({}, opts, {
@@ -173,7 +179,7 @@ function payPanel() {
     h('h2', null, 'Documenti casa (bollette e pagamenti)'),
     h('p', { class: 'small', style: 'margin-top:0' }, st),
     fld('owner', 'Utente GitHub'), fld('repo', 'Repo dati di Documenti casa'),
-    fld('token', 'Token (lascia vuoto per usare quello della lista)', { type: 'password', placeholder: 'stesso token della lista' }),
+    fld('token', docsAppCfg() ? 'Token (vuoto = usa quello di Documenti casa su questo telefono)' : 'Token (lascia vuoto per usare quello della lista)', { type: 'password', placeholder: docsAppCfg() ? 'preso da Documenti casa' : 'stesso token della lista' }),
     fld('appUrl', 'Indirizzo dell\'app Documenti casa', { type: 'url' }),
     h('div', { class: 'inline', style: 'margin-top:12px' },
       h('button', { class: 'btn primary', onclick: async () => {
@@ -184,5 +190,6 @@ function payPanel() {
       c.on ? h('button', { class: 'btn danger', onclick: () => { lsSet(DOCS_LS.cfg, Object.assign({}, c, { on: false })); DocsLink.state = 'off'; render(); } }, 'Scollega') : null),
     h('div', { class: 'help', style: 'margin-top:12px' },
       h('p', { style: 'margin:0 0 6px' }, 'Le bollette, le rate del condominio, le multe e gli altri documenti "Da pagare" o "Addebito" compaiono in Attività. Spuntarli qui li segna pagati anche in Documenti casa, e viceversa.'),
-      h('p', { style: 'margin:0' }, 'Il token deve poter leggere e scrivere anche il repo ', h('code', null, 'documenti-casa-data'), ': su GitHub apri il token della lista → Edit → Repository access → aggiungi quel repo. Il token non cambia, non serve reincollarlo.')));
+      docsAppCfg() ? h('p', { style: 'margin:0 0 6px' }, 'Su questo telefono Documenti casa è già collegata: la lista usa il suo collegamento in automatico, non serve fare altro.') : null,
+      h('p', { style: 'margin:0' }, 'Se Documenti casa non è configurata su questo telefono, il token deve poter leggere e scrivere anche il repo ', h('code', null, 'documenti-casa-data'), ': su GitHub apri il token della lista → Edit → Repository access → aggiungi quel repo. Il token non cambia, non serve reincollarlo.')));
 }
